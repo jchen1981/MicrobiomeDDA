@@ -1,5 +1,5 @@
 # Title: An omnibust for different abundance analysis of microbiome-seq data
-# Version: 0.1
+# Version: 0.0.1
 # Authors: Jun Chen (chen.jun2@mayo.edu)
 # Description: It implements a general regression framework allowing the prevalence, 
 # abundance, and dispersion to depend on covariates. Existing packages do not allow
