@@ -316,7 +316,7 @@ zinb.reg <- function (formula, data, subset, na.action, weights, offset,
 			cat("generating starting values...\n")
 		}
 		# Using zeroinfl 
-		m0 <- zeroinfl(Y ~ 1 | 1 , offset = offsetx, dist = "negbin", EM = TRUE)
+		m0 <- zeroinfl(Y ~ 1 | 1 , offset = offsetx, dist = "negbin", EM = FALSE)
 		start$zero <- c(m0$coefficients$zero, rep(0, kz - 1))
 		start$count <- c(m0$coefficients$count, rep(0, kx - 1))
 		start$theta <- c(log(m0$theta), rep(0, km - 1))
