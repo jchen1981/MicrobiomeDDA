@@ -1,5 +1,5 @@
 # Title: Artifical simulations to illustrate our omnibus test for differential abundance
-# analysis of microbiome-seq data. Only one taxon are simulated for illustration purpose.
+# analysis of microbiome-seq data. Only one taxon is simulated for illustration purpose.
 # Authors: Jun Chen (chen.jun2@mayo.edu)
 # Date: 2017/02/07
 
