@@ -35,7 +35,7 @@ hist(rowMeans(otu.tab.win != 0))
 
 # Step 3-4: For demonstration purpose, we just run on a subset of OTUs with many 0's,
 # In practice, we may need to make decision what OTUs will be tested and which model
-# will use (goodness-of-test). 
+# will be useed (goodness-of-fit). 
 
 otu.tab.win.sel <- otu.tab.win[rowMeans(otu.tab.win != 0) > 0.20 & 
 				rowMeans(otu.tab.win != 0) < 0.80, ]
