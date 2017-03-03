@@ -5,3 +5,5 @@ To install the package, download the package, open a terminal, change path to th
 It implements a fully generalized regression framework allowing the prevalance, abundance, and dispersion to depend on covariates. Existing packages does not allowing covariate-dependent dispersion, which could lead to either reduced power or inflated type I error if the heterogenety is not taken into account. It has similar syntax as 'zeroinf' from 'pscl' package.
 3. zeroinfl.plus.example.R
 Artifical simulations to illustrate the proposed method. 
+4. zeroinfl.plus.realdata.R
+Using a real microbiome data to illustrate the proposed method (GMPR + winsorization + omnibus test).
