@@ -3,7 +3,7 @@
 # Authors: Jun Chen (chen.jun2@mayo.edu)
 # Date: 2017/02/07
 
-source('zeroinfl.plus.R')
+source('zeroinfl.plus.github.R')
 
 ns <- 100      # Number of sample
 zp <- 0.4      # Zero propability
