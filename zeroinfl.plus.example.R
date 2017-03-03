@@ -5,7 +5,7 @@
 
 source('zeroinfl.plus.github.R')
 
-ns <- 100      # Number of sample
+ns <- 100      # Number of samples
 zp <- 0.4      # Zero propability
 prp <- 0.02    # OTU relative abundance
 iter <- 50     # Iteration number
