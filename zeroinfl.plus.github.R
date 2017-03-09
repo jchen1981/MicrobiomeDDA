@@ -10,7 +10,7 @@
 #####################################################################################
 #                              Instructions
 # 
-# The function has a similar interface as 'zeroinfl' for the main function 'zinb.reg' 
+# The main function 'zinb.reg' has a similar interface as 'zeroinfl' from 'pscl' package  
 # Please see 'zeroinfl' for more details.
 # In this implementation, we allow covariate-dependent dispersion, which can be used to
 # model data heterogeneity. 
