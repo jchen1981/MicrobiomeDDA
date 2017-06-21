@@ -1,11 +1,11 @@
 # Title: Artifical simulations to illustrate our omnibus test for differential abundance
-# analysis of microbiome-seq data. Only one taxon is simulated for illustration purpose.
+# analysis of microbiome-seq data. Only one taxon are simulated for illustration purpose.
 # Authors: Jun Chen (chen.jun2@mayo.edu)
 # Date: 2017/02/07
 
-source('zeroinfl.plus.github.R')
+source('~/Dropbox/Workspace/MayoClinic/Methodology/2014_06_01_Omnibus_Test/zeroinfl.plus.github.R')
 
-ns <- 100      # Number of samples
+ns <- 100      # Number of sample
 zp <- 0.4      # Zero propability
 prp <- 0.02    # OTU relative abundance
 iter <- 50     # Iteration number
@@ -29,12 +29,13 @@ for (i in 1:iter) {
 	# ominbus test for prevalence/abundance/dispersion
 	zinb.obj1 <- zinb.lrt(formula.H1 = y ~ grp + offset(log(size.factor)) | grp | grp, 
 			formula.H0 = y ~ 1 + offset(log(size.factor)) | 1 | 1, data=data,
-			control = zinb.control(trace=FALSE))
+			control = zinb.control(trace=TRUE))
 	
 	# test for differential prevalence/abundance, allowing dispersion depending on the group
 	zinb.obj2 <- zinb.lrt(formula.H1=y ~ grp + offset(log(size.factor)) | grp | grp, 
 			formula.H0 = y ~ 1 + offset(log(size.factor)) | 1 | grp, data=data,
 			control = zinb.control(trace=FALSE))
+	
 	pv.lrt1 <- c(pv.lrt1, zinb.obj1$p.value)
 	pv.lrt2 <- c(pv.lrt2, zinb.obj2$p.value)
 }

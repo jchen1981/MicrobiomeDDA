@@ -1,4 +1,4 @@
-# Title: An omnibus for differential distribution analysis of microbiome-seq data
+# Title: An omnibust for different abundance analysis of microbiome-seq data
 # Version: 0.0.1
 # Authors: Jun Chen (chen.jun2@mayo.edu)
 # Description: It implements a general regression framework allowing the prevalence, 
@@ -9,8 +9,8 @@
 
 #####################################################################################
 #                              Instructions
-# 
-# The main function 'zinb.reg' has a similar interface as 'zeroinfl' from 'pscl' package  
+# The code was adapted on the function 'zeroinfl' from 'pscl' package.
+# It has a similar interface as 'zeroinfl' for the main functions 'zinb.reg' 
 # Please see 'zeroinfl' for more details.
 # In this implementation, we allow covariate-dependent dispersion, which can be used to
 # model data heterogeneity. 
@@ -22,6 +22,72 @@
 # where we specify models for count (abundance), zero (prevalence) and dispersion part. 
 # We also provide likelihood ratio test (zinb.lrt) for different models.
 #####################################################################################
+# New: 2017_06_20
+require(pscl)
+require(matrixStats)
+
+GMPR <- function (comm, intersect.no=4, ct.min=2) {
+	# Computes the GMPR size factor
+	#
+	# Args:
+	#   comm: a matrix of counts, row - features (OTUs, genes, etc) , column - sample
+	#   intersect.no: the minimum number of shared features between sample pair, where the ratio is calculated
+	#   ct.min: the minimum number of counts required to calculate ratios ct.min = 5 has better results
+	
+	#
+	# Returns:
+	#   a list that contains:
+	#      gmpr： the GMPR size factors for all samples; Samples with distinct sets of features will be output as NA.
+	#      nss:   number of samples with significant sharing (> intersect.no) including itself
+	
+	# mask counts < ct.min
+	comm[comm < ct.min] <- 0
+	
+	if (is.null(colnames(comm))) {
+		colnames(comm) <- paste0('S', 1:ncol(comm))
+	}
+	
+#	cat('Begin GMPR size factor calculation ...\n')
+	
+	comm.no <- numeric(ncol(comm))
+	gmpr <- sapply(1:ncol(comm),  function(i) {		
+#				if (i %% 50 == 0) {
+#					cat(i, '\n')
+#				}
+				x <- comm[, i]
+				# Compute the pairwise ratio
+				pr <- x / comm
+				# Handling of the NA, NaN, Inf
+				pr[is.nan(pr) | !is.finite(pr) | pr == 0] <- NA
+				# Counting the number of non-NA, NaN, Inf
+				incl.no <- colSums(!is.na(pr))		
+				# Calculate the median of PR
+				pr.median <- colMedians(pr, na.rm=TRUE)
+				# Record the number of samples used for calculating the GMPR
+				comm.no[i] <<- sum(incl.no >= intersect.no)
+				# Geometric mean of PR median
+				if (comm.no[i] > 1) {
+					return(exp(mean(log(pr.median[incl.no >= intersect.no]))))
+				} else {
+					return(NA)
+				}
+			}
+	)
+	
+	if (sum(is.na(gmpr))) {
+		warning(paste0('The following samples\n ', paste(colnames(comm)[is.na(gmpr)], collapse='\n'), 
+						'\ndo not share at least ', intersect.no, ' common taxa with the rest samples! ',
+						'For these samples, their size factors are set to be NA! \n', 
+						'You may consider removing these samples since they are potentially outliers or negative controls!\n',
+						'You may also consider decreasing the minimum number of intersecting taxa and rerun the procedure!\n'))
+	}
+	
+#	cat('Completed!\n')
+#	cat('Please watch for the samples with limited sharing with other samples based on NSS! They may be outliers! \n')
+	attr(gmpr, 'NSS') <- comm.no
+	names(gmpr) <- colnames(comm)
+	return(gmpr)
+}
 
 model_offset_2 <- function (x, terms = NULL, offset = TRUE)  {
 	if (is.null(terms)) 
@@ -58,7 +124,7 @@ zinb.control <- function (maxIter = 200, tol = 1e-5, trace = TRUE, start = NULL)
 zinb.reg <- function (formula, data, subset, na.action, weights, offset, 
 		link = c("logit", "probit", "cloglog", "cauchit", "log"), control = zinb.control(), 
 		model = TRUE, y = TRUE, x = FALSE, ...) {
-	
+
 	# Augmented likelihood
 	loglik <- function (paras, p.ind, pi.ind, phi.ind, X.p, X.pi, X.phi, y, a, offsetz, offsetx, offsetm) {
 		# Make sure all the coefficients are in matrix format
@@ -136,6 +202,7 @@ zinb.reg <- function (formula, data, subset, na.action, weights, offset,
 	linkstr <- match.arg(link)
 	linkobj <- make.link(linkstr)
 	linkinv <- linkobj$linkinv
+	link <- linkobj$link
 	
 	if (control$trace) {
 		cat("Zero-inflated Count Model\n", paste("count model: negative binomial model",
@@ -572,7 +639,7 @@ nb.reg <- function (formula, data, subset, na.action, weights, offset,
 		if (!("theta" %in% names(start))) {
 			valid <- FALSE
 			warning("invalid starting values, dispersion model coefficients not specified")
-			start$zero <- rep.int(0, km)
+			start$theta <- rep.int(0, km)
 		}
 		if (length(start$count) != kx) {
 			valid <- FALSE
@@ -594,9 +661,11 @@ nb.reg <- function (formula, data, subset, na.action, weights, offset,
 			cat("generating starting values...\n")
 		}
 		# offset confusion, to circumvent, we use it as a covariate
+	    # Supply a different starting point
 		m0 <- glm.nb(Y ~ 1 + offsetx)
 		start$count <- c(m0$coefficients[1], rep(0, kx - 1))
 		start$theta <- c(log(m0$theta), rep(0, km - 1))
+	
 		
 	}
 	if (control$trace) {
@@ -672,21 +741,32 @@ nb.reg <- function (formula, data, subset, na.action, weights, offset,
 
 # LRT for prevalence and/or abundance and/or dispersion 
 # Wald test has inflated type I error if dispersion is tested
+# Handle situations where the algorithm does converge 
 zinb.lrt <- function (formula.H1, formula.H0, data, ...) {
 	
 	mod1 <- zinb.reg(formula=formula.H1, data=data, ...)
 	mod0 <- zinb.reg(formula=formula.H0, data=data, ...)
-	p.value <- pchisq(2 * (mod1$loglik - mod0$loglik), df = mod0$df.residual - mod1$df.residual, lower.tail = FALSE)
-	# Extract variables of interest
-	var.name <- setdiff(colnames(mod1$vcov), colnames(mod0$vcov))
-	coef <- unlist(mod1$coefficients)[var.name]
-	se <- sqrt(diag(mod1$vcov[var.name, var.name, drop=FALSE]))
-    se[is.nan(se)] <- NA
-	zstat <- coef / se
+	if (mod1$converge & mod0$converg) {
+		dof <- mod0$df.residual - mod1$df.residual
+		chi.stat <- 2 * (mod1$loglik - mod0$loglik)
+		p.value <- pchisq(chi.stat, df = dof, lower.tail = FALSE)
+		# Extract variables of interest
+		var.name <- setdiff(colnames(mod1$vcov), colnames(mod0$vcov))
+		coef <- unlist(mod1$coefficients)[var.name]
+		se <- sqrt(diag(mod1$vcov[var.name, var.name, drop=FALSE]))
+		se[is.nan(se)] <- NA
+		zstat <- coef / se
 #	pval <- 2 * pnorm(-abs(zstat))
-	coef <- cbind(coef, se, coef - 1.96 * se, coef + 1.96 * se, zstat)
-	colnames(coef) <- c("Estimate", "Std. Error", "2.5%", "97.5%",  "z value")
-	list(mod.H1 = mod1, mod.H0 = mod0, p.value = p.value, coef = coef)
+		coef <- cbind(coef, se, coef - 1.96 * se, coef + 1.96 * se, zstat)
+		colnames(coef) <- c("Estimate", "Std. Error", "2.5%", "97.5%",  "z value")
+	} else {
+		p.value <- NA
+		coef <- NA
+		chi.stat <- NA
+		dof <- dof 
+	}
+
+	list(mod.H1 = mod1, mod.H0 = mod0, p.value = p.value, chi.stat = chi.stat, dof = dof, coef = coef)
 }
 
 # LRT for prevalence and/or abundance and/or dispersion 
@@ -695,17 +775,26 @@ nb.lrt <- function (formula.H1, formula.H0, data, ...) {
 	
 	mod1 <- nb.reg(formula=formula.H1, data=data, ...)
 	mod0 <- nb.reg(formula=formula.H0, data=data, ...)
-	p.value <- pchisq(2 * (mod1$loglik - mod0$loglik), df = mod0$df.residual - mod1$df.residual, lower.tail = FALSE)
-	# Extract variables of interest
-	var.name <- setdiff(colnames(mod1$vcov), colnames(mod0$vcov))
-	coef <- unlist(mod1$coefficients)[var.name]
-	se <- sqrt(diag(mod1$vcov[var.name, var.name, drop=FALSE]))
-	se[is.nan(se)] <- NA
-	zstat <- coef / se
+	if (mod1$converge & mod0$converg) {
+		dof <- mod0$df.residual - mod1$df.residual
+		chi.stat <- 2 * (mod1$loglik - mod0$loglik)
+		p.value <- pchisq(chi.stat, df = dof, lower.tail = FALSE)
+		# Extract variables of interest
+		var.name <- setdiff(colnames(mod1$vcov), colnames(mod0$vcov))
+		coef <- unlist(mod1$coefficients)[var.name]
+		se <- sqrt(diag(mod1$vcov[var.name, var.name, drop=FALSE]))
+		se[is.nan(se)] <- NA
+		zstat <- coef / se
 #	pval <- 2 * pnorm(-abs(zstat))
-	coef <- cbind(coef, se, coef - 1.96 * se, coef + 1.96 * se, zstat)
-	colnames(coef) <- c("Estimate", "Std. Error", "2.5%", "97.5%",  "z value")
-	list(mod.H1 = mod1, mod.H0 = mod0, p.value = p.value, coef = coef)
+		coef <- cbind(coef, se, coef - 1.96 * se, coef + 1.96 * se, zstat)
+		colnames(coef) <- c("Estimate", "Std. Error", "2.5%", "97.5%",  "z value")
+	} else {
+		p.value <- NA
+		coef <- NA
+		chi.stat <- NA
+		dof <- dof 
+	}
+	list(mod.H1 = mod1, mod.H0 = mod0, p.value = p.value, chi.stat = chi.stat, dof = dof, coef = coef)
 }
 
 # Bootstrap test for zeroinflation
@@ -713,79 +802,163 @@ nb.lrt <- function (formula.H1, formula.H0, data, ...) {
 # Based on simulation studies, both NB/ZINB have conservative type I error control under model under/over-specification
 # Therefore, selecting a more appropriate model is more about increasing the power
 # The current test can be used as a screening step
-zeroinfl.test <- function (y, size.factor, B=999) {
-	zero.obs <- sum(y == 0)
-	if (zero.obs == 0) return(1)
-	n <- length(y)
-	obj <- glm.nb(y ~ 1 + offset(log(size.factor)))
-	# Not converged usually indicate severe zeroinflation
-	if (!obj$converged) {
-		return(1 / (B + 1))
-	} 
-	mu <- exp(obj$coefficient + log(size.factor))
-	size <- obj$theta
-	y.bt <- matrix(rnbinom(n * B, mu = mu, size = size), ncol=B)
-	return(mean(c(colSums(y.bt == 0) >= zero.obs, 1)))
-}
+#zeroinfl.test <- function (y, size.factor, B=999) {
+#	zero.obs <- sum(y == 0)
+#	if (zero.obs == 0) return(1)
+#	n <- length(y)
+#	obj <- glm.nb(y ~ 1 + offset(log(size.factor)))
+#	# Not converged usually indicate severe zeroinflation
+#	if (!obj$converged) {
+#		return(1 / (B + 1))
+#	} 
+#	mu <- exp(obj$coefficient + log(size.factor))
+#	size <- obj$theta
+#	y.bt <- matrix(rnbinom(n * B, mu = mu, size = size), ncol=B)
+#	return(mean(c(colSums(y.bt == 0) >= zero.obs, 1)))
+#}
 
-GMPR <- function (comm, intersect.no=4, ct.min=2) {
-	# Computes the GMPR size factor
-	#
-	# Args:
-	#   comm: a matrix of counts, row - features (OTUs, genes, etc) , column - sample
-	#   intersect.no: the minimum number of shared features between sample pair, where the ratio is calculated
-	#   ct.min: the minimum number of counts required to calculate ratios
-
-	#
-	# Returns:
-	#   a list that contains:
-	#      gmpr： the GMPR size factors for all samples; Samples with distinct sets of features will be output as NA.
-	#      nss:   number of samples with significant sharing (> intersect.no) including itself
+permute_differential_analysis <- function (meta.dat, prop, grp.name, adj.name=NULL, strata=NULL, 
+		block.perm=FALSE, sqrt.trans=TRUE, resid.perm=TRUE, perm.no=999) {
+	# Square transformation
+	# User should take care of the normalization, transformation and addressing outliers
+	if (sqrt.trans) {
+		Y <- sqrt(prop)
+	} else {
+		Y <- prop
+	}
+	row.names <- rownames(Y)
 	
-	# mask counts < ct.min
-	comm[comm < ct.min] <- 0
-	
-	if (is.null(colnames(comm))) {
-		colnames(comm) <- paste0('S', 1:ncol(comm))
+	if (!is.null(strata)) {
+		strata <- factor(strata)
 	}
 	
-	cat('Begin GMPR size factor calculation ...\n')
+	# Prepare model matrix
+	n <- ncol(prop)
+	I <- diag(n)
+	if (is.null(adj.name)) {
+		M0 <- model.matrix(~ 1, meta.dat)
+	} else {
+		df0 <- meta.dat[, c(adj.name), drop=F]
+		M0 <- model.matrix( ~., df0)
+	}
+
 	
-	comm.no <- numeric(ncol(comm))
-	gmpr <- sapply(1:ncol(comm),  function(i) {		
-				if (i %% 50 == 0) {
-					cat(i, '\n')
-				}
-				x <- comm[, i]
-				# Compute the pairwise ratio
-				pr <- x / comm
-				# Handling of the NA, NaN, Inf
-				pr[is.nan(pr) | !is.finite(pr) | pr == 0] <- NA
-				# Counting the number of non-NA, NaN, Inf
-				incl.no <- colSums(!is.na(pr))		
-				# Calculate the median of PR
-				pr.median <- colMedians(pr, na.rm=TRUE)
-				# Record the number of samples used for calculating the GMPR
-				comm.no[i] <<- sum(incl.no >= intersect.no)
-				# Geometric mean of PR median
-				if (comm.no[i] > 1) {
-					return(exp(mean(log(pr.median[incl.no >= intersect.no]))))
-				} else {
-					return(NA)
-				}
+	df1 <- meta.dat[, c(adj.name, grp.name), drop=F]
+	M1 <- model.matrix( ~., df1)
+	
+	# QR decompostion
+	qrX0 <- qr(M0, tol = 1e-07)
+	Q0 <- qr.Q(qrX0)
+	Q0 <- Q0[, 1:qrX0$rank, drop=FALSE]
+	
+	qrX1 <- qr(M1, tol = 1e-07)
+	Q1 <- qr.Q(qrX1)
+	Q1 <- Q1[, 1:qrX1$rank, drop=FALSE]
+	
+	# Got residual
+	if (resid.perm) {
+		if (!block.perm) {
+			# Permute the residual
+			if (is.null(adj.name)) {
+				Y <- t(resid(lm(as.formula(paste('t(Y) ~ 1')), meta.dat)))
+			} else {
+				Y <- t(resid(lm(as.formula(paste('t(Y) ~ ', paste(adj.name, collapse='+'))), meta.dat)))
 			}
-	)
-	
-	if (sum(is.na(gmpr))) {
-		warning(paste0('The following samples\n ', paste(colnames(comm)[is.na(gmpr)], collapse='\n'), 
-				'\ndo not share at least ', intersect.no, ' common taxa with the rest samples! ',
-				'For these samples, their size factors are set to be NA! \n', 
-				'You may consider removing these samples since they are potentially outliers or negative controls!\n',
-				'You may also consider decreasing the minimum number of intersecting taxa and rerun the procedure!\n'))
+			
+		} else {
+			
+			if (is.null(strata)) {
+				stop('Block permutation requires strata!\n')
+			} else {
+				Y.r <- matrix(NA, nrow(Y), nlevels(strata))
+				Y.e <- Y
+				cat('Fitting linear mixed effects model ...\n')
+				for (j in 1:nrow(Y)) {
+					# Linear mixed effects model
+					yy <- Y[j, ]
+					meta.dat$yy <- yy
+					meta.dat$strata <- strata
+					if (is.null(adj.name)) {
+						obj <- lme(as.formula(paste('yy ~ 1')), random =~ 1 |  strata, data=meta.dat, method='ML')
+						# The order is the same as the levels
+						Y.r[j, ] <- random.effects(obj)[, 1]
+						Y.e[j, ] <- resid(obj)
+					} else {
+						obj <- lme(as.formula(paste('yy ~ ', paste(adj.name, collapse='+'))), random =~ 1 |  strata, data=meta.dat, method='ML')
+						Y.r[j, ] <- random.effects(obj)[, 1]
+						Y.e[j, ] <- resid(obj)
+					}
+				}
+				Y <- Y.r[, as.numeric(strata)] + Y.e
+				#			Y <- Y - rowMeans(Y)
+				#		    Y <- Y.e
+			}
+		}
 	}
 	
-	cat('Completed!\n')
-	cat('Please watch for the samples with limited sharing with other samples based on NSS! They may be outliers! \n')
-	names(gmpr) <- names(comm.no) <- colnames(comm)
-	return(list(gmpr=gmpr, nss=comm.no))
+
+	TSS <- rowSums(Y^2)
+	MSS1 <- rowSums((Y %*% Q1)^2)
+	MSS0 <- rowSums((Y %*% Q0)^2)  # Not necessary, it's zero
+	F0 <- (MSS1 - MSS0) /  (TSS - MSS1) 
+	
+	if (block.perm == FALSE) {
+		perm.ind <- vegan:::getPermuteMatrix(perm.no, n, strata = strata)
+		perm.no <- nrow(perm.ind)
+	}
+	
+	cat('Permutation test ....\n')
+	Fp <- sapply(1:perm.no, function(i) {
+			#	if (i %% 100 == 0) cat('.')
+				if (block.perm == FALSE) {
+					Yp <- Y[, perm.ind[i, ]]
+				} else {
+					# Double permutation
+					strata.p <- factor(strata, levels=sample(levels(strata)))
+					Yp <- Y.r[, as.numeric(strata.p)] + Y.e[, sample(ncol(Y))]
+
+				}
+
+				MSS1p <- rowSums((Yp %*% Q1)^2)
+				MSS0p <- rowSums((Yp %*% Q0)^2)    
+				if (block.perm == FALSE) {
+					TSSp <- TSS
+				} else {
+					TSSp <- rowSums(Yp^2)
+				}
+				(MSS1p - MSS0p) /  (TSSp - MSS1p) 
+			})
+	
+	
+	if (mean(is.na(F0)) >= 0.1) {
+		warning('More than 10% observed F stats have NA! Please check! \n')
+	}
+	
+	if (mean(is.na(Fp)) >= 0.1) {
+		warning('More than 10% permuted F stats have NA! Please check! \n')
+	}
+	
+	na.ind <- is.na(F0)
+	F0 <- F0[!na.ind]
+	Fp <- Fp[!na.ind, ]
+	
+	p.raw <- cbind(Fp >= F0, 1)
+	p.raw <- rowMeans(p.raw)
+
+	
+	# Pad back the NA values
+	pad <- function (vec, ind) {
+		vec0 <- numeric(length(ind))
+		vec0[!ind] <- vec
+		vec0[ind] <- NA
+		vec0
+	}
+	
+	F0 <- pad(F0, na.ind)
+	p.raw <- pad(p.raw, na.ind)
+
+	
+	names(F0) <- names(p.raw) <- row.names
+	return(list(F.stat=F0, p.raw=p.raw))
+
 }
