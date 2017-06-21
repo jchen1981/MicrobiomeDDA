@@ -1,4 +1,4 @@
-# Title: An omnibus for different distribution analysis of zeroinflated seq data
+# Title: An omnibus test for different distribution analysis of zeroinflated seq data
 # Version: 0.0.1
 # Authors: Jun Chen (chen.jun2@mayo.edu)
 # Description: A user-friendly interface to perform the omnibus test. The input
@@ -54,7 +54,7 @@ ZISeq <- function (otu.tab, meta.dat,
 	#        standard errors and the method used.
 	#	size.factor: the size.factor used for normalization
 	#   test.ind: a vector of logical values indicating which taxa are tested
-    #
+        #
 	#
 	if (sum(colnames(otu.tab) != rownames(meta.dat)) != 0) {
 		stop("The sample names for the otu table and the meta data table do not agree!\n")
