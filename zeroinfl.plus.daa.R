@@ -1,17 +1,19 @@
-# Title: An omnibus for different abundance analysis of microbiome-seq data
+# Title: An omnibus for different distribution analysis of zeroinflated seq data
 # Version: 0.0.1
 # Authors: Jun Chen (chen.jun2@mayo.edu)
-# Description: A user-friendly interface to perform the proposed omnibus test. The input
+# Description: A user-friendly interface to perform the omnibus test. The input
 # are simply the OTU table (row - OTUs, column - samples) and the meta data file. 
+# Note: Due to many parameters and asymptotics invovled, it is not recommended
+# to run on a small smaple size (e.g. < 50).
 # Date: 2017/06/12
 
 # New: 2017_06_20
 
-zeroinfl.seq <- function (otu.tab, meta.dat, 
+ZISeq <- function (otu.tab, meta.dat, 
 		size.factor = NULL,                                  # Normalization (GMPR)
 		winsor = TRUE, winsor.qt = 0.97,                     # Winsorization
 		grp.name, adj.name = NULL, 
-		method = c('omnibus', 'prev.abund', 'general'), 
+		method = c('omnibus', 'prev.abund1', 'prev.abund2', 'general'), 
 		formula.H1 = NULL, formula.H0 = NULL, 
 		filter = TRUE, prev.filter = 0.1, ct.cutoff = 10,    # Filter
 		fail.method = 'permutation')    
@@ -29,18 +31,22 @@ zeroinfl.seq <- function (otu.tab, meta.dat,
 	#       grp.name: the name of the co-variate of interest. It could be numeric or categorical
 	#       adj.name: a vector of the names of the covariates to be adjusted.  
 	#       method:  the method to be used. The default is the 'omnibus' test. A joint test of
-	#			  prevalence and abundance parameter ('prev.abund') is also given, where the
-	#			  dispersion is still allowed to depend on the covariates. The 'general' method
-	#             allows the user to specify its H0 and H1 hypotheses.
+	#			  prevalence and abundance parameter ('prev.abund1') is also given, where the
+	#			  dispersion is still allowed to depend on the covariates. 'prev.abund2' assumes
+	#             a common dispersion parameter (i.e. does not depend on the covariates). The 'general'
+	#             method allows the user to specify its H0 and H1 hypotheses (see below).            
 	#       formula.H1, formula.H0: characters, the formulae for the H0 and H1 hypotheses. These 
 	#		are for advanced use when method = 'general'. Example:
-	#			  formula.H1 = "y ~ Smoking + offset(log(size.factor)) | Smoking | Smoking", 
-	#			  formula.H0 = "y ~ 1 + offset(log(size.factor)) | 1 | 1"
+	#			  formula.H1 = "y ~ Smoking + Batch + offset(log(size.factor)) | Batch + Smoking | Batch", 
+	#			  formula.H0 = "y ~ 1 + Batch + offset(log(size.factor)) | Batch | Batch"
+	#             which tests the smoking effects on prevalence/abundance while adjusting batch effects. The
+	#             batch variable usually affects both the scale and dispersion parameter so we let it 
+	#             depend on all the parameters.
 	#   	filter: a logical value indicating whether filtering should be performed
 	#       prev.filter, ct.cutoff: filter criteria,  taxa with at least 'ct.cuoff' counts
 	#              in at least 'prev.filter' samples are tested.
-	#       fail.method: the method used for failed taxa (due to very low prevalence/absence, or
-	#              very high prevalence/abundance
+	#       fail.method: the method used for failed taxa (due to very low prevalence/abundance, or
+	#              very high prevalence/abundance)
 	#
 	# Returns:
 	# 	result: a data.frame containing the p-values, test statistic, degree of freedoms,
@@ -117,7 +123,7 @@ zeroinfl.seq <- function (otu.tab, meta.dat,
 		}
 	}
 	
-	if (method == 'prev.abund') {
+	if (method == 'prev.abund1') {
 		cat('--Prev.abund test is selected!\n--Dispersion is treated as a nuisance parameter but it is allowed to vary with covariates!\n')
 		if (!is.null(adj.name)) {
 			formula.H1 <- (paste0('y ~ ', grp.name, '+', paste(adj.name, collapse = ' + '), ' + offset(log(size.factor)) | ',
@@ -132,6 +138,24 @@ zeroinfl.seq <- function (otu.tab, meta.dat,
 							grp.name))
 			formula.H0 <- (paste0('y ~  1 + offset(log(size.factor)) | 1 | ', 
 							grp.name))
+		}
+	}
+	
+	if (method == 'prev.abund2') {
+		cat('--Prev.abund test is selected!\n--Dispersion is treated as a nuisance parameter and is common for all samples!\n')
+		if (!is.null(adj.name)) {
+			formula.H1 <- (paste0('y ~ ', grp.name, '+', paste(adj.name, collapse = ' + '), ' + offset(log(size.factor)) | ',
+								grp.name, ' + ', paste(adj.name, collapse = ' + '), ' | ', 
+								'1'))
+			formula.H0 <- (paste0('y ~ ', paste(adj.name, collapse = ' + '), ' + offset(log(size.factor)) | ',
+								paste(adj.name, collapse = ' + '), ' | ', 
+								'1'))
+		} else {
+			formula.H1 <- (paste0('y ~ ', grp.name, ' + offset(log(size.factor)) | ',
+								grp.name,  ' | ', 
+								'1'))
+			formula.H0 <- (paste0('y ~  1 + offset(log(size.factor)) | 1 | ', 
+								'1'))
 		}
 	}
 	

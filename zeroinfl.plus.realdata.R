@@ -20,7 +20,7 @@ otu.tab <- t(throat.otu.tab)
 ###############################################
 # Ominbus test
 meta.dat <- throat.meta
-obj <- zeroinfl.seq (otu.tab, meta.dat, 
+obj <- ZISeq(otu.tab, meta.dat, 
 		size.factor = NULL,                                  # Normalization (GMPR)
 		winsor = TRUE, winsor.qt = 0.97,                     # Winsorization
 		grp.name = 'SmokingStatus', adj.name = NULL, 
@@ -30,14 +30,26 @@ obj <- zeroinfl.seq (otu.tab, meta.dat,
 obj$result
 
 
-# Prevalence/absence test
+# Prevalence/absence test - dispersion still depends on covariate
 meta.dat <- throat.meta
-obj <- zeroinfl.seq (otu.tab, meta.dat, 
+obj <- ZISeq(otu.tab, meta.dat, 
 		size.factor = NULL,                                  # Normalization (GMPR)
 		winsor = TRUE, winsor.qt = 0.97,                     # Winsorization
 		grp.name = 'SmokingStatus', adj.name = NULL, 
-		method = 'prev.abund',
+		method = 'prev.abund1',
 		filter = TRUE, prev.filter = 0.1, ct.cutoff = 10     # Filter
 ) 
 obj$result
+
+# Prevalence/absence test - common dispersion
+meta.dat <- throat.meta
+obj <- ZISeq(otu.tab, meta.dat, 
+		size.factor = NULL,                                  # Normalization (GMPR)
+		winsor = TRUE, winsor.qt = 0.97,                     # Winsorization
+		grp.name = 'SmokingStatus', adj.name = NULL, 
+		method = 'prev.abund2',
+		filter = TRUE, prev.filter = 0.1, ct.cutoff = 10     # Filter
+) 
+obj$result
+
 ###############################################
