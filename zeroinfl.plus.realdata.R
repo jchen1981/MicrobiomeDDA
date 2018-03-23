@@ -30,7 +30,7 @@ obj <- ZISeq(otu.tab, meta.dat,
 obj$result
 
 
-# Prevalence/absence test - dispersion still depends on covariate
+# Prevalence/abundance test - dispersion still depends on covariate
 meta.dat <- throat.meta
 obj <- ZISeq(otu.tab, meta.dat, 
 		size.factor = NULL,                                  # Normalization (GMPR)
@@ -41,7 +41,7 @@ obj <- ZISeq(otu.tab, meta.dat,
 ) 
 obj$result
 
-# Prevalence/absence test - common dispersion
+# Prevalence/abundance test - common dispersion
 meta.dat <- throat.meta
 obj <- ZISeq(otu.tab, meta.dat, 
 		size.factor = NULL,                                  # Normalization (GMPR)
